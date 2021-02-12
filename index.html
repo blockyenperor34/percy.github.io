@@ -1,0 +1,514 @@
+
+<!doctype html>
+<html lang="zh-TW">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="profile" href="https://gmpg.org/xfn/11" />
+	<title>文章 &#8211; 紹謙的資料分享區</title>
+
+<!-- Async WordPress.com Remote Login -->
+<script id="wpcom_remote_login_js">
+var wpcom_remote_login_extra_auth = '';
+function wpcom_remote_login_remove_dom_node_id( element_id ) {
+	var dom_node = document.getElementById( element_id );
+	if ( dom_node ) { dom_node.parentNode.removeChild( dom_node ); }
+}
+function wpcom_remote_login_remove_dom_node_classes( class_name ) {
+	var dom_nodes = document.querySelectorAll( '.' + class_name );
+	for ( var i = 0; i < dom_nodes.length; i++ ) {
+		dom_nodes[ i ].parentNode.removeChild( dom_nodes[ i ] );
+	}
+}
+function wpcom_remote_login_final_cleanup() {
+	wpcom_remote_login_remove_dom_node_classes( "wpcom_remote_login_msg" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_validate" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_js" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_iframe" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_styles" );
+}
+
+// Watch for messages back from the remote login
+window.addEventListener( "message", function( e ) {
+	if ( e.origin === "https://r-login.wordpress.com" ) {
+		var data = {};
+		try {
+			data = JSON.parse( e.data );
+		} catch( e ) {
+			wpcom_remote_login_final_cleanup();
+			return;
+		}
+
+		if ( data.msg === 'LOGIN' ) {
+			// Clean up the login check iframe
+			wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+
+			var id_regex = new RegExp( /^[0-9]+$/ );
+			var token_regex = new RegExp( /^.*|.*|.*$/ );
+			if (
+				token_regex.test( data.token )
+				&& id_regex.test( data.wpcomid )
+			) {
+				// We have everything we need to ask for a login
+				var script = document.createElement( "script" );
+				script.setAttribute( "id", "wpcom_remote_login_validate" );
+				script.src = '/remote-login.php?wpcom_remote_login=validate'
+					+ '&wpcomid=' + data.wpcomid
+					+ '&token=' + encodeURIComponent( data.token )
+					+ '&host=' + window.location.protocol
+						+ '//' + window.location.hostname;
+				document.body.appendChild( script );
+			}
+
+			return;
+		}
+
+		// Safari ITP, not logged in, so redirect
+		if ( data.msg === 'LOGIN-REDIRECT' ) {
+			window.location = 'https://wordpress.com/log-in?redirect_to=' + window.location.href;
+			return;
+		}
+
+		// Safari ITP, storage access failed, remove the request
+		if ( data.msg === 'LOGIN-REMOVE' ) {
+			var css_zap = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } @media screen and ( max-width: 782px ) { html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } }';
+			var style_zap = document.createElement( 'style' );
+			style_zap.type = 'text/css';
+			style_zap.appendChild( document.createTextNode( css_zap ) );
+			document.body.appendChild( style_zap );
+
+			var e = document.getElementById( 'wpcom_request_access_iframe' );
+			e.parentNode.removeChild( e );
+
+			document.cookie = 'wordpress_com_login_access=denied; path=/; max-age=31536000';
+
+			return;
+		}
+
+		// Safari ITP
+		if ( data.msg === 'REQUEST_ACCESS' ) {
+			console.log( 'request access: safari' );
+
+			// Check ITP iframe enable/disable knob
+			if ( wpcom_remote_login_extra_auth !== 'safari_itp_iframe' ) {
+				return;
+			}
+
+			// If we are in a "private window" there is no ITP.
+			var private_window = false;
+			try {
+				var opendb = window.openDatabase( null, null, null, null );
+			} catch( e ) {
+				private_window = true;
+			}
+
+			if ( private_window ) {
+				console.log( 'private window' );
+				return;
+			}
+
+			var iframe = document.createElement( 'iframe' );
+			iframe.id = 'wpcom_request_access_iframe';
+			iframe.setAttribute( 'scrolling', 'no' );
+			iframe.setAttribute( 'sandbox', 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-top-navigation-by-user-activation' );
+			iframe.src = 'https://r-login.wordpress.com/remote-login.php?wpcom_remote_login=request_access&origin=' + encodeURIComponent( data.origin ) + '&wpcomid=' + encodeURIComponent( data.wpcomid );
+
+			var css = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 46px !important; } * html body { margin-top: 46px !important; } @media screen and ( max-width: 660px ) { html { margin-top: 71px !important; } * html body { margin-top: 71px !important; } #wpcom_request_access_iframe { display: block; height: 71px !important; } } #wpcom_request_access_iframe { border: 0px; height: 46px; position: fixed; top: 0; left: 0; width: 100%; min-width: 100%; z-index: 99999; background: #23282d; } ';
+
+			var style = document.createElement( 'style' );
+			style.type = 'text/css';
+			style.id = 'wpcom_request_access_styles';
+			style.appendChild( document.createTextNode( css ) );
+			document.body.appendChild( style );
+
+			document.body.appendChild( iframe );
+		}
+
+		if ( data.msg === 'DONE' ) {
+			wpcom_remote_login_final_cleanup();
+		}
+	}
+}, false );
+
+// Inject the remote login iframe after the page has had a chance to load
+// more critical resources
+window.addEventListener( "DOMContentLoaded", function( e ) {
+	var iframe = document.createElement( "iframe" );
+	iframe.style.display = "none";
+	iframe.setAttribute( "scrolling", "no" );
+	iframe.setAttribute( "id", "wpcom_remote_login_key" );
+	iframe.src = "https://r-login.wordpress.com/remote-login.php"
+		+ "?wpcom_remote_login=key"
+		+ "&origin=aHR0cHM6Ly9wZXJjeS5tb3ZpZS5ibG9n"
+		+ "&wpcomid=172489268"
+		+ "&time=1613130374";
+	document.body.appendChild( iframe );
+}, false );
+</script>
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel='dns-prefetch' href='//percymovie.wordpress.com' />
+<link rel='dns-prefetch' href='//wordpress.com' />
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel="alternate" type="application/rss+xml" title="訂閱 紹謙的資料分享區 &raquo;" href="https://percy.movie.blog/feed/" />
+<link rel="alternate" type="application/rss+xml" title="訂閱 紹謙的資料分享區 &raquo; 迴響" href="https://percy.movie.blog/comments/feed/" />
+	<script type="text/javascript">
+		/* <![CDATA[ */
+		function addLoadEvent(func) {
+			var oldonload = window.onload;
+			if (typeof window.onload != 'function') {
+				window.onload = func;
+			} else {
+				window.onload = function () {
+					oldonload();
+					func();
+				}
+			}
+		}
+		/* ]]> */
+	</script>
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/72x72\/","ext":".png","svgUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/s0.wp.com\/wp-includes\/js\/wp-emoji-release.min.js?m=1612197847h&ver=5.6.1"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([55357,56424,8205,55356,57212],[55357,56424,8203,55356,57212])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='all-css-0-1' href='https://s0.wp.com/_static/??-eJytkdtOwzAMhl+I1OqgAy4Qz5KkVvCWk2KHqW9P2rJpjGnsgpsotv/vlw9wyMqmKBgFQlXZV0eR4ZBtCooDeZwuos4yP8B1zNMeGXYoWdu9WqJf8qPW1RYaLK5VCsLna/fSPYGp5EcwPi28KbpMwDJ5/Acf+cBwj89CnY2hp1RFuULj3a1cWBQtFB3/gdv0jW26oXuEkVhOOXUdPdv9PH3Lh6xlVgQcSaNvE0e5ha23NSYXZFbtDVSDWlZ189SNmq3XI0MT/sysKEFMQo3m02cuvIe3fttvhv65H/rdF2uq8Io=?cssminify=yes' type='text/css' media='all' />
+<style id='wp-block-library-inline-css'>
+.has-text-align-justify {
+	text-align:justify;
+}
+</style>
+<link rel='stylesheet' id='print-css-1-1' href='https://s0.wp.com/wp-content/themes/pub/varia/print.css?m=1571655471h&cssminify=yes' type='text/css' media='print' />
+<link rel='stylesheet' id='all-css-2-1' href='https://s0.wp.com/_static/??-eJx9i0EKwjAQAD9kXCrU6kF8y3ZdYyTJhmzS0N+3xYuieJuBGWjJkMTCsUB5cGCFVEcIODeRG2iZPe9JdQe/wwmzQ3CRXqlpiSR8DaGa5Kt1UcGyGC+ExUn8EHP36PK/NfPoxa5oYa3edJuu4dIdu8N56E/98FwASoVPsw==?cssminify=yes' type='text/css' media='all' />
+<link crossorigin="anonymous" rel='stylesheet' id='maywood-fonts-css'  href='https://fonts.googleapis.com/css?family=IBM+Plex+Sans%3A300%2C300i%2C500%2C500i%2C700&#038;subset=latin%2Clatin-ext' media='all' />
+<link rel='stylesheet' id='all-css-4-1' href='https://s0.wp.com/wp-content/themes/pub/maywood/style.css?m=1612975857h&cssminify=yes' type='text/css' media='all' />
+<style id='jetpack-global-styles-frontend-style-inline-css'>
+:root { --font-headings: unset; --font-base: unset; --font-headings-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; --font-base-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;}
+</style>
+<link rel='stylesheet' id='all-css-6-1' href='https://s0.wp.com/_static/??-eJxti8sKgCAQAH8oW6KHdoi+xcTUWF1pjX4/OnSIOg0DM3BmYSgVmwrEQ2Q8XEgMmbiIFXXYgb3eQ3IPa8Ncwf/FZIJGgeToLZ+peBstg+/AIS0a72COU9OPUg69atV2AWWKN+I=?cssminify=yes' type='text/css' media='all' />
+<script id='wpcom-actionbar-placeholder-js-extra'>
+var actionbardata = {"siteID":"172489268","siteName":"\u7d39\u8b19\u7684\u8cc7\u6599\u5206\u4eab\u5340","siteURL":"https:\/\/percy.movie.blog","icon":"<img alt='' src='https:\/\/s0.wp.com\/i\/logo\/wpcom-gray-white.png' class='avatar avatar-50' height='50' width='50' \/>","canManageOptions":"","canCustomizeSite":"","isFollowing":"","themeSlug":"pub\/maywood","signupURL":"https:\/\/wordpress.com\/start\/","loginURL":"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fpercy.movie.blog%2Fpercy2%2F&signup_flow=account&domain=percy.movie.blog","themeURL":"https:\/\/wordpress.com\/theme\/maywood\/","xhrURL":"https:\/\/percy.movie.blog\/wp-admin\/admin-ajax.php","nonce":"607f5920d7","isSingular":"1","isFolded":"","isLoggedIn":"","isMobile":"","subscribeNonce":"<input type=\"hidden\" id=\"_wpnonce\" name=\"_wpnonce\" value=\"20937d3847\" \/>","referer":"https:\/\/percy.movie.blog\/percy2\/","canFollow":"1","feedID":null,"statusMessage":"","customizeLink":"https:\/\/percymovie.wordpress.com\/wp-admin\/customize.php?url=https%3A%2F%2Fpercymovie.wordpress.com%2Fpercy2%2F","postID":"7","shortlink":"https:\/\/wp.me\/PbFKkY-7","canEditPost":"","editLink":"https:\/\/wordpress.com\/page\/percy.movie.blog\/7","statsLink":"https:\/\/wordpress.com\/stats\/post\/7\/percy.movie.blog","i18n":{"view":"\u6aa2\u8996\u7db2\u7ad9","follow":"\u8ffd\u8e64","following":"\u5df2\u8ffd\u8e64","edit":"\u7de8\u8f2f","login":"\u767b\u5165","signup":"\u8a3b\u518a","customize":"\u81ea\u8a02","report":"\u56de\u5831\u6b64\u5167\u5bb9","themeInfo":"\u53d6\u5f97\u4f48\u666f\u4e3b\u984c: Maywood","shortlink":"\u8907\u88fd\u77ed\u7db2\u5740","copied":"\u5df2\u8907\u88fd","followedText":"\u6b64\u7db2\u7ad9\u7684\u65b0\u6587\u7ae0\u5c07\u986f\u793a\u65bc\u4f60\u7684<a href=\"https:\/\/wordpress.com\/\">\u95b1\u8b80\u5668<\/a>\u4e2d","foldBar":"\u6536\u5408\u6b64\u5217","unfoldBar":"\u5c55\u958b\u6b64\u5217","editSubs":"\u7ba1\u7406\u8a02\u95b1","viewReader":"\u5728\u8b80\u53d6\u5668\u4e2d\u6aa2\u8996\u7db2\u7ad9","viewReadPost":"\u4ee5\u95b1\u8b80\u5668\u6aa2\u8996","subscribe":"\u6211\u8981\u8a3b\u518a","enterEmail":"\u8f38\u5165\u4f60\u7684\u96fb\u5b50\u90f5\u4ef6\u5730\u5740","followers":"","alreadyUser":"\u5df2\u7d93\u6709 WordPress.com \u5e33\u865f\u4e86\uff1f<a href=\"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fpercy.movie.blog%2Fpercy2%2F&signup_flow=account&domain=percy.movie.blog\">\u7acb\u5373\u767b\u5165\u3002<\/a>","stats":"\u7db2\u7ad9\u7d71\u8a08"}};
+</script>
+<script type='text/javascript' src='https://s0.wp.com/_static/??-eJyFyk0KgCAQQOELZaKB0SI6i9UkIzqWP0S3z8B9qwePj98n2wJloMxt4j6s6ICVBFGb+hjSEXqbOl4d0ubKDumD9ioQn5beI/0i5tFEnaHhxc9CCTmMclLSvnPgMRs='></script>
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://percymovie.wordpress.com/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://s0.wp.com/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress.com" />
+<link rel="canonical" href="https://percy.movie.blog/percy2/" />
+<link rel='shortlink' href='https://wp.me/PbFKkY-7' />
+<link rel="alternate" type="application/json+oembed" href="https://public-api.wordpress.com/oembed/?format=json&amp;url=https%3A%2F%2Fpercy.movie.blog%2Fpercy2%2F&amp;for=wpcom-auto-discovery" /><link rel="alternate" type="application/xml+oembed" href="https://public-api.wordpress.com/oembed/?format=xml&amp;url=https%3A%2F%2Fpercy.movie.blog%2Fpercy2%2F&amp;for=wpcom-auto-discovery" />
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="文章" />
+<meta property="og:url" content="https://percy.movie.blog/percy2/" />
+<meta property="og:description" content="本頁面所有內容皆為一級版權。|何為版權? 回主頁" />
+<meta property="article:published_time" content="2020-02-06T03:57:18+00:00" />
+<meta property="article:modified_time" content="2020-08-24T02:03:16+00:00" />
+<meta property="og:site_name" content="紹謙的資料分享區" />
+<meta property="og:image" content="https://s0.wp.com/i/blank.jpg" />
+<meta property="og:locale" content="zh_TW" />
+<meta name="twitter:site" content="@wordpressdotcom" />
+<meta name="twitter:text:title" content="文章" />
+<meta name="twitter:card" content="summary" />
+<meta property="article:publisher" content="https://www.facebook.com/WordPresscom" />
+
+<!-- End Jetpack Open Graph Tags -->
+<link rel="shortcut icon" type="image/x-icon" href="https://s0.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="icon" type="image/x-icon" href="https://s0.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="apple-touch-icon" href="https://s0.wp.com/i/webclip.png" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://percy.movie.blog/osd.xml" title="紹謙的資料分享區" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://s1.wp.com/opensearch.xml" title="WordPress.com" />
+<meta name="application-name" content="紹謙的資料分享區" /><meta name="msapplication-window" content="width=device-width;height=device-height" /><meta name="msapplication-task" content="name=訂閱;action-uri=https://percy.movie.blog/feed/;icon-uri=https://s0.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=註冊免費網誌;action-uri=http://wordpress.com/signup/;icon-uri=https://s0.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com 支援團隊;action-uri=http://support.wordpress.com/;icon-uri=https://s0.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com 論壇;action-uri=http://forums.wordpress.com/;icon-uri=https://s0.wp.com/i/favicon.ico" /><meta name="description" content="本頁面所有內容皆為一級版權。|何為版權? 回主頁" />
+</head>
+
+<body class="page-template-default page page-id-7 wp-embed-responsive customizer-styles-applied singular image-filters-enabled hide-homepage-title highlander-enabled highlander-light">
+
+
+<div id="page" class="site">
+	<a class="skip-link screen-reader-text" href="#content">跳至內容區</a>
+
+	
+<header id="masthead" class="site-header responsive-max-width has-title-and-tagline" role="banner">
+	<div class="site-branding">
+
+								<p class="site-title"><a href="https://percy.movie.blog/" rel="home">紹謙的資料分享區</a></p>
+			
+	</div><!-- .site-branding -->
+		</header><!-- #masthead -->
+
+	<div id="content" class="site-content">
+
+	<section id="primary" class="content-area">
+		<main id="main" class="site-main">
+
+			
+<article id="post-7" class="post-7 page type-page status-publish hentry entry">
+
+	<header class="entry-header responsive-max-width">
+		
+<h1 class="entry-title">文章</h1>
+	</header>
+
+	
+	<div class="entry-content">
+						<div
+			class="wp-block-newspack-blocks-homepage-articles  wpnbha is-grid columns-3 show-image image-aligntop ts-4 is-3 is-landscape "
+			style=""
+			>
+			<div data-posts data-current-post-id="7">
+								
+	<article data-post-id="197"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/08/23/anti1/" rel="bookmark">防疫基礎，大家一起走</a></h2>						<p>關於防疫，相信每個人都知道:戴口罩、勤洗手、少外出。這樣足夠嗎? 如果要認真說起防疫工作，可是十分的多樣性，例<a class="more-link" href="https://percy.movie.blog/2020/08/23/anti1/">繼續閱讀 <span class="screen-reader-text">&#8220;防疫基礎，大家一起走"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-08-23T04:03:00+08:00">2020-08-23</time><time class="updated" datetime="2020-08-23T16:03:12+08:00">2020-08-23</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+		
+	<article data-post-id="193"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/08/23/copyright/" rel="bookmark">何為紹謙網頁版權?</a></h2>						<p>版權分級 紹謙網頁的版權共分為三級，數字越大，規則越嚴格。 級數 網頁一級版權 網頁二級版權 網頁三級版權 可<a class="more-link" href="https://percy.movie.blog/2020/08/23/copyright/">繼續閱讀 <span class="screen-reader-text">&#8220;何為紹謙網頁版權?"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-08-23T03:38:00+08:00">2020-08-23</time><time class="updated" datetime="2020-08-23T15:37:46+08:00">2020-08-23</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+		
+	<article data-post-id="205"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/03/22/anti2/" rel="bookmark">安心防疫，自我保護</a></h2>						<p>大家都知道防疫有可能讓人情緒緊繃，但是紓解的方法是什麼，就讓我們繼續看下去。 大家可能有聽過「安、靜、能、繫、<a class="more-link" href="https://percy.movie.blog/2020/03/22/anti2/">繼續閱讀 <span class="screen-reader-text">&#8220;安心防疫，自我保護"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-03-22T12:14:51+08:00">2020-03-22</time><time class="updated" datetime="2020-08-23T16:09:29+08:00">2020-08-23</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+					</div>
+			
+		</div>
+				
+
+				<div
+			class="wp-block-newspack-blocks-homepage-articles  wpnbha is-grid columns-3 show-image image-aligntop ts-4 is-3 is-landscape "
+			style=""
+			>
+			<div data-posts data-current-post-id="7">
+								
+	<article data-post-id="163"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/03/04/003/" rel="bookmark">YouTuber工作介紹</a></h2>						<p>YouTuber是一個工作，是一個可以簡單也可以複雜的工作，我正好就是YouTuber，今天要來介紹這個工作。<a class="more-link" href="https://percy.movie.blog/2020/03/04/003/">繼續閱讀 <span class="screen-reader-text">&#8220;YouTuber工作介紹"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-03-04T17:50:46+08:00">2020-03-04</time><time class="updated" datetime="2020-03-04T17:55:28+08:00">2020-03-04</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+		
+	<article data-post-id="158"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/03/04/002/" rel="bookmark">最新影片竟然遇到死亡村莊!!!(2020/2/15 14:20)</a></h2>						<p>今天，紹謙在拍攝紹謙mineraft時，遇到死亡村莊，還看到殭屍村民，在這之前，紹謙發現村莊時，高興的不得了，<a class="more-link" href="https://percy.movie.blog/2020/03/04/002/">繼續閱讀 <span class="screen-reader-text">&#8220;最新影片竟然遇到死亡村莊!!!(2020/2/15 14:20)"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-03-04T17:45:11+08:00">2020-03-04</time><time class="updated" datetime="2020-03-04T17:56:10+08:00">2020-03-04</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+		
+	<article data-post-id="120"
+		class="category-%e6%9c%aa%e5%88%86%e9%a1%9e type-post"
+				>
+		
+		<div class="entry-wrapper">
+			<h2 class="entry-title"><a href="https://percy.movie.blog/2020/02/17/001/" rel="bookmark">紹謙的YouTube頻道初步經營</a></h2>						<p>自我介紹 大家好，我是黃紹謙，我平常喜歡在YouTube放影片給觀眾看，希望能有更多人認識我。 靈感&#038;nbsp<a class="more-link" href="https://percy.movie.blog/2020/02/17/001/">繼續閱讀 <span class="screen-reader-text">&#8220;紹謙的YouTube頻道初步經營"</span></a></p>
+				<div class="entry-meta">
+					<a href="https://percy.movie.blog/author/percy971115/"><img alt='' src='https://1.gravatar.com/avatar/134358118c40d8ee93bde4383c21bd58?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a>							<span class="byline">
+								作者: <span class="author vcard"><a class="url fn n" href="https://percy.movie.blog/author/percy971115/">percy971115</a></span>							</span><!-- .author-name -->
+							<time class="entry-date published" datetime="2020-02-17T14:56:10+08:00">2020-02-17</time><time class="updated" datetime="2020-07-09T18:57:22+08:00">2020-07-09</time>				</div><!-- .entry-meta -->
+					</div><!-- .entry-wrapper -->
+	</article>
+
+					</div>
+			
+		</div>
+				
+
+
+<p class="has-text-align-left">本頁面所有內容皆為一級版權。|<a href="https://percy.movie.blog/2020/08/23/copyright/">何為版權? </a></p>
+
+
+
+<h2 class="has-text-align-center"><a href="https://percy.movie.blog">回主頁</a></h2>
+<div id="jp-post-flair" class="sharedaddy sd-like-enabled sd-sharing-enabled"><div class='sharedaddy sd-block sd-like jetpack-likes-widget-wrapper jetpack-likes-widget-unloaded' id='like-post-wrapper-172489268-7-60266a86510e4' data-src='//widgets.wp.com/likes/index.html?ver=20200826#blog_id=172489268&amp;post_id=7&amp;origin=percymovie.wordpress.com&amp;obj_id=172489268-7-60266a86510e4&amp;domain=percy.movie.blog' data-name='like-post-frame-172489268-7-60266a86510e4'><h3 class='sd-title'>請按讚：</h3><div class='likes-widget-placeholder post-likes-widget-placeholder' style='height: 55px;'><span class='button'><span>喜歡</span></span> <span class="loading">正在載入...</span></div><span class='sd-text-color'></span><a class='sd-link-color'></a></div></div>	</div><!-- .entry-content -->
+
+	</article><!-- #post-7 -->
+
+		</main><!-- #main -->
+	</section><!-- #primary -->
+
+
+	</div><!-- #content -->
+
+	
+	<footer id="colophon" class="site-footer responsive-max-width">
+			
+	
+		<div class="site-info">
+		<a class="site-name" href="https://percy.movie.blog/" rel="home">紹謙的資料分享區</a><span class="comma">,</span>
+<a href="https://wordpress.com/?ref=footer_segment_blog" rel="nofollow">在WordPress.com寫網誌.</a>	</div><!-- .site-info -->
+	</footer><!-- #colophon -->
+
+</div><!-- #page -->
+
+<!--  -->
+<script src='//0.gravatar.com/js/gprofiles.js?ver=202106y' id='grofiles-cards-js'></script>
+<script id='wpgroho-js-extra'>
+var WPGroHo = {"my_hash":""};
+</script>
+<script type='text/javascript' src='https://s0.wp.com/wp-content/mu-plugins/gravatar-hovercards/wpgroho.js?m=1610363240h'></script>
+
+	<script>
+		// Initialize and attach hovercards to all gravatars
+		( function() {
+			function init() {
+				if ( typeof Gravatar === 'undefined' ) {
+					return;
+				}
+
+				if ( typeof Gravatar.init !== 'function' ) {
+					return;
+				}
+
+				Gravatar.profile_cb = function ( hash, id ) {
+					WPGroHo.syncProfileData( hash, id );
+				};
+
+				Gravatar.my_hash = WPGroHo.my_hash;
+				Gravatar.init( 'body', '#wp-admin-bar-my-account' );
+			}
+
+			if ( document.readyState !== 'loading' ) {
+				init();
+			} else {
+				document.addEventListener( 'DOMContentLoaded', init );
+			}
+		} )();
+	</script>
+
+		<div style="display:none">
+	<div class="grofile-hash-map-134358118c40d8ee93bde4383c21bd58">
+	</div>
+	</div>
+
+<script>
+window.addEventListener( "load", function( event ) {
+	var link = document.createElement( "link" );
+	link.href = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.css?v=20201002";
+	link.type = "text/css";
+	link.rel = "stylesheet";
+	document.head.appendChild( link );
+
+	var script = document.createElement( "script" );
+	script.src = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.js?v=20201002";
+	script.defer = true;
+	document.body.appendChild( script );
+} );
+</script>
+
+	<link rel='stylesheet' id='all-css-0-2' href='https://s0.wp.com/wp-content/plugins/full-site-editing-plugin/548743551/newspack-blocks/dist/blog-posts-block-view.css?m=1612811071h&cssminify=yes' type='text/css' media='all' />
+<script id='comment-like-js-extra'>
+var comment_like_text = {"loading":"\u8f09\u5165\u4e2d..."};
+</script>
+<script type='text/javascript' src='https://s0.wp.com/_static/??-eJyFUdtOwzAM/SFSE1jZXhDfkiZecZYbcdIyvp6MFqQxVJ5inascw5yEjqFgKGAZDE6kMb13lu/gmkqRi0dmNeIfrH2rmM/r01GYCOd/ZRZLUvokMjJ93KT6KpKrIwUGRydkaKaKryoYh3lDrKP3DRKLyV7cA/BMaavhxnQFbBiV8RTEoDJ4xQVzm0TJbasfEwXtqllSDXGBCYOJ+UKl6M5Hcq5rGb87vguO1TnBVFCgoUJhXKuh3x32u8e+lxBw5q+PHFxsxUtLm5u0HY0XWKwnefHP8kk+HKS830v7CbtPvjk='></script>
+<script type='text/javascript'>
+( 'fetch' in window ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-fetch.min.js?m=1612197847h&#038;ver=3.0.0"></scr' + 'ipt>' );( document.contains ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-node-contains.min.js?m=1540208548h&#038;ver=3.42.0"></scr' + 'ipt>' );( window.DOMRect ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-dom-rect.min.js?m=1612197847h&#038;ver=3.42.0"></scr' + 'ipt>' );( window.URL && window.URL.prototype && window.URLSearchParams ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-url.min.js?m=1585663916h&#038;ver=3.6.4"></scr' + 'ipt>' );( window.FormData && window.FormData.prototype.keys ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-formdata.min.js?m=1550600082h&#038;ver=3.0.12"></scr' + 'ipt>' );( Element.prototype.matches && Element.prototype.closest ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-element-closest.min.js?m=1540208548h&#038;ver=2.0.2"></scr' + 'ipt>' );
+( "objectFit" in document.documentElement.style ) || document.write( '<script src="https://s0.wp.com/wp-content/plugins/gutenberg-core/v9.8.4/vendor/object-fit-polyfill.min.f68d8b8b.js?m=1611569426h&#038;ver=2.3.0"></scr' + 'ipt>' );
+</script>
+	<script>
+	/(trident|msie)/i.test(navigator.userAgent)&&document.getElementById&&window.addEventListener&&window.addEventListener("hashchange",function(){var t,e=location.hash.substring(1);/^[A-z0-9_-]+$/.test(e)&&(t=document.getElementById(e))&&(/^(?:a|select|input|button|textarea)$/i.test(t.tagName)||(t.tabIndex=-1),t.focus())},!1);
+	</script>
+	<script type="text/javascript">
+// <![CDATA[
+(function() {
+try{
+  if ( window.external &&'msIsSiteMode' in window.external) {
+    if (window.external.msIsSiteMode()) {
+      var jl = document.createElement('script');
+      jl.type='text/javascript';
+      jl.async=true;
+      jl.src='/wp-content/plugins/ie-sitemode/custom-jumplist.php';
+      var s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(jl, s);
+    }
+  }
+}catch(e){}
+})();
+// ]]>
+</script>		<iframe src='https://widgets.wp.com/likes/master.html?ver=20200826#ver=20200826&amp;lang=zh-tw' scrolling='no' id='likes-master' name='likes-master' style='display:none;'></iframe>
+		<div id='likes-other-gravatars'><div class="likes-text"><span>%d</span> 位部落客按了讚：</div><ul class="wpl-avatars sd-like-gravatars"></ul></div>
+<script src="//stats.wp.com/w.js?61" defer></script> <script type="text/javascript">
+_tkq = window._tkq || [];
+_stq = window._stq || [];
+_tkq.push(['storeContext', {'blog_id':'172489268','blog_tz':'8','user_lang':'zh-tw','blog_lang':'zh-tw','user_id':'0'}]);
+_stq.push(['view', {'blog':'172489268','v':'wpcom','tz':'8','user_id':'0','post':'7','subd':'percymovie'}]);
+_stq.push(['extra', {'crypt':'UE40eW5QN0p8M2Y/RE1TaVhzUzFMbjdWNHpwZGhTayxPSUFCMGNrd29+Smw0TDhnZmRTK0hlRi9QSGh6bi9GXVhBJWIlZlR5U1JMLU8/MkNtblkvY1d1S0RjZ0NYPVltP0lmMjNGLmI3eVRNRURiV3drWTA4Ml1SY0dWUC03dmRaNSZ8cEdmWGdtTHZEL1pjRSZxRWJWSnFOfDlBNGYwYmJnUE9oWmJMNS9OP25BJWdNY3c2ZkxKeThRU0tLcGh6TF9LcSV+MkxFXWlVdV8mel1bTloxP2pVQ01mWUtvdlpYTzdEXXc0dzhpWEo1RGk3VHlRM1FQVkg2ZUZjYXclNUdkMw=='}]);
+_stq.push([ 'clickTrackerInit', '172489268', '7' ]);
+	</script>
+<noscript><img src="https://pixel.wp.com/b.gif?v=noscript" style="height:1px;width:1px;overflow:hidden;position:absolute;bottom:1px;" alt="" /></noscript>
+<script>
+if ( 'object' === typeof wpcom_mobile_user_agent_info ) {
+
+	wpcom_mobile_user_agent_info.init();
+	var mobileStatsQueryString = "";
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedPlatformName )
+		mobileStatsQueryString += "&x_" + 'mobile_platforms' + '=' + wpcom_mobile_user_agent_info.matchedPlatformName;
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedUserAgentName )
+		mobileStatsQueryString += "&x_" + 'mobile_devices' + '=' + wpcom_mobile_user_agent_info.matchedUserAgentName;
+	
+	if( wpcom_mobile_user_agent_info.isIPad() )
+		mobileStatsQueryString += "&x_" + 'ipad_views' + '=' + 'views';
+
+	if( "" != mobileStatsQueryString ) {
+		new Image().src = document.location.protocol + '//pixel.wp.com/g.gif?v=wpcom-no-pv' + mobileStatsQueryString + '&baba=' + Math.random();
+	}
+	
+}
+</script>
+</body>
+</html>
